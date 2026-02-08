@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.36705.20
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VoxFlow", "VoxFlow\VoxFlow.csproj", "{6FB9B5A1-D57F-4959-BF27-38A2F08360AD}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WhisperService", "tools\whisper\WhisperService\WhisperService.csproj", "{D2C1F0BC-9913-4B68-961B-080E3468D6C6}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{6FB9B5A1-D57F-4959-BF27-38A2F08360AD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6FB9B5A1-D57F-4959-BF27-38A2F08360AD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6FB9B5A1-D57F-4959-BF27-38A2F08360AD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6FB9B5A1-D57F-4959-BF27-38A2F08360AD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D2C1F0BC-9913-4B68-961B-080E3468D6C6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D2C1F0BC-9913-4B68-961B-080E3468D6C6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D2C1F0BC-9913-4B68-961B-080E3468D6C6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D2C1F0BC-9913-4B68-961B-080E3468D6C6}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {EEE94D10-6001-468B-9292-8E7263103AD6}
+	EndGlobalSection
+EndGlobal

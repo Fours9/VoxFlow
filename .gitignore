@@ -1,0 +1,35 @@
+# Build
+[Dd]ebug/
+[Rr]elease/
+[Bb]in/
+[Oo]bj/
+*.user
+*.suo
+*.cache
+*.log
+
+# IDE
+.vs/
+.vscode/
+.cursor/
+
+# Python / diarizer
+diarizer_service/.venv/
+*.pyc
+__pycache__/
+
+# Whisper model binaries (large, download separately); folder is kept, contents ignored
+tools/whisper/models/*
+!tools/whisper/models/.gitkeep
+
+# Vosk model contents (large, download separately); folders EN, RU, UK are kept, contents ignored
+tools/VoskModels/model/EN/*
+!tools/VoskModels/model/EN/.gitkeep
+tools/VoskModels/model/RU/*
+!tools/VoskModels/model/RU/.gitkeep
+tools/VoskModels/model/UK/*
+!tools/VoskModels/model/UK/.gitkeep
+
+# OS
+Thumbs.db
+.DS_Store

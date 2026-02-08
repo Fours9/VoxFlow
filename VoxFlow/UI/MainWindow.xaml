@@ -1,0 +1,88 @@
+<Window x:Class="VoxFlow.UI.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Speech to Chat"
+        Width="1000"
+        Height="700">
+
+    <Grid Margin="10" MouseDown="Grid_MouseDown">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="2*" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Status Bar -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
+            <Button x:Name="SettingsButton"
+                    Content="⚙ Settings"
+                    Width="100"
+                    Height="30"
+                    Margin="0,0,10,0"
+                    Click="SettingsButton_Click"/>
+            <Button x:Name="OpenSttInputFolderButton"
+                    Content="Открыть папку с окнами"
+                    Width="160"
+                    Height="30"
+                    Margin="0,0,10,0"
+                    ToolTip="Открыть папку, в которую копируются WAV-окна для прослушивания (настройка в Settings)"
+                    Click="OpenSttInputFolderButton_Click"/>
+            <Ellipse x:Name="PauseIndicator" 
+                     Width="12" Height="12" 
+                     Margin="5,0,0,0"
+                     VerticalAlignment="Center"
+                     Fill="Gray"/>
+            <TextBlock x:Name="StatusTextBlock" 
+                       VerticalAlignment="Center" 
+                       Margin="10,0,0,0"
+                       FontWeight="Bold"/>
+            <TextBlock x:Name="QueueStatsTextBlock" 
+                       VerticalAlignment="Center" 
+                       Margin="16,0,0,0"
+                       Foreground="DimGray"
+                       FontSize="12"
+                       ToolTip="Общая очередь | Очередь движка 1 | Очередь движка 2 …"/>
+        </StackPanel>
+
+        <!-- Speaker Toggle Buttons -->
+        <StackPanel x:Name="SpeakerTogglesPanel"
+                    Grid.Row="0"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Margin="0,0,0,8">
+            <ToggleButton x:Name="Speaker1Toggle" Content="1" Width="30" Height="30" Margin="2" Background="Blue" Foreground="White" IsChecked="True" Checked="SpeakerToggle_Checked" Unchecked="SpeakerToggle_Unchecked" Tag="1"/>
+            <ToggleButton x:Name="Speaker2Toggle" Content="2" Width="30" Height="30" Margin="2" Background="Red" Foreground="White" IsChecked="True" Checked="SpeakerToggle_Checked" Unchecked="SpeakerToggle_Unchecked" Tag="2"/>
+            <ToggleButton x:Name="Speaker3Toggle" Content="3" Width="30" Height="30" Margin="2" Background="Purple" Foreground="White" IsChecked="True" Checked="SpeakerToggle_Checked" Unchecked="SpeakerToggle_Unchecked" Tag="3"/>
+            <ToggleButton x:Name="Speaker4Toggle" Content="4" Width="30" Height="30" Margin="2" Background="Yellow" IsChecked="True" Checked="SpeakerToggle_Checked" Unchecked="SpeakerToggle_Unchecked" Tag="4"/>
+            <ToggleButton x:Name="Speaker5Toggle" Content="5" Width="30" Height="30" Margin="2" Background="Orange" IsChecked="True" Checked="SpeakerToggle_Checked" Unchecked="SpeakerToggle_Unchecked" Tag="5"/>
+            <ToggleButton x:Name="Speaker6Toggle" Content="6" Width="30" Height="30" Margin="2" Background="Green" Foreground="White" IsChecked="True" Checked="SpeakerToggle_Checked" Unchecked="SpeakerToggle_Unchecked" Tag="6"/>
+        </StackPanel>
+
+        <!-- HISTORY -->
+        <RichTextBox x:Name="HistoryRichTextBox"
+                     Grid.Row="1"
+                     IsReadOnly="True"
+                     VerticalScrollBarVisibility="Auto"
+                     Margin="0,0,0,8"
+                     PreviewMouseDown="HistoryRichTextBox_PreviewMouseDown"
+                     SelectionChanged="HistoryRichTextBox_SelectionChanged"/>
+
+        <!-- DRAFT -->
+        <TextBox x:Name="DraftTextBox"
+                 Grid.Row="2"
+                 TextWrapping="Wrap"
+                 VerticalScrollBarVisibility="Auto"
+                 Margin="0,0,0,8"
+                 GotFocus="EditorTextBox_GotFocus"
+                 TextChanged="DraftTextBox_TextChanged"/>
+
+        <!-- LIVE -->
+        <TextBox x:Name="LiveTextBox"
+                 Grid.Row="3"
+                 TextWrapping="Wrap"
+                 VerticalScrollBarVisibility="Auto"
+                 GotFocus="EditorTextBox_GotFocus"
+                 TextChanged="LiveTextBox_TextChanged"/>
+    </Grid>
+</Window>

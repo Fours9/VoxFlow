@@ -1,0 +1,223 @@
+Архитектура распределения аудио окон и параллельной работы WhisperRunner
+======================================================================
+
+1. Общий поток аудио
+---------------------
+
+- Захват звука выполняется в `AudioCapture` (loopback, конвертация в mono 16kHz).
+- Аудио кусками передаётся в `WindowBuffer`, который собирает окна длиной `WindowSizeSec`
+  с шагом `StepSec` (без перекрытия или с перекрытием, в зависимости от настроек).
+- Когда окно готово, `WindowBuffer` вызывает:
+
+  `OnWindowReady(wavPath, windowStartAbsSec)` в `AudioPipeline`.
+
+
+2. Архитектура очередей и диспетчера
+------------------------------------
+
+Цепочка:
+
+`WindowBuffer → OnWindowReady → Общая очередь входящих окон → Диспетчер (DispatchWindowsAsync / DistributeWindowToRunner) → Queue[RunnerN] → ProcessRunnerQueueAsync → WhisperRunnerN → ReorderBuffer → HistoryController`
+
+ASCII‑схема:
+
+```
+WindowBuffer
+    │
+    │ OnWindowReady(wavPath, startAbs)
+    ▼
+Общая очередь входящих окон (_incomingWindows)
+    │
+    │ DispatchWindowsAsync / DistributeWindowToRunner
+    ▼
+ ┌───────────────────────────┬───────────────────────────┬───────────────────────────┐
+ │                           │                           │                           │
+ ▼                           ▼                           ▼                           ▼
+Queue[Runner1]          Queue[Runner2]              Queue[Runner3]              ... Queue[RunnerN]
+   │                         │                           │
+   │                         │                           │
+   ▼                         ▼                           ▼
+ProcessRunnerQueueAsync(1) ProcessRunnerQueueAsync(2) ProcessRunnerQueueAsync(3)  ... (N)
+   │                         │                           │
+   ▼                         ▼                           ▼
+WhisperRunner1           WhisperRunner2               WhisperRunner3             ... WhisperRunnerN
+   │                         │                           │
+   └──────────────┬──────────┴───────────┬───────────────┘
+                  ▼                      ▼
+            ReorderBuffer (по SequenceNumber)
+                  │
+                  ▼
+           HistoryController.AppendSegments
+```
+
+
+3. Структура данных в AudioPipeline
+-----------------------------------
+
+```csharp
+// Структура окна с порядковым номером
+private class WindowTask
+{
+    public string WavPath { get; set; }
+    public double StartAbsSec { get; set; }
+    public long SequenceNumber { get; set; } // Порядковый номер для упорядочивания
+}
+
+// Очереди задач для каждого WhisperRunner
+private readonly List<Queue<WindowTask>> _runnerQueues;
+private readonly List<object> _runnerQueueLocks;
+private readonly List<bool> _runnerIsProcessing;
+
+// Общая очередь входящих окон
+private readonly Queue<WindowTask> _incomingWindows;
+private readonly object _incomingQueueLock;
+private bool _isDispatching;
+
+// Нумерация окон
+private long _nextSequenceNumber; // Счетчик для присвоения порядковых номеров
+private const int MaxQueueSize = 2; // Максимальный размер входной очереди (старые окна могут дропаться)
+
+// Буфер упорядочивания результатов
+private readonly Dictionary<long, List<HistorySegment>> _reorderBuffer; // sequenceNumber -> segments
+private long _nextExpectedSequence; // Следующий ожидаемый sequence number
+private readonly object _reorderBufferLock;
+```
+
+
+4. Алгоритм работы OnWindowReady
+--------------------------------
+
+При вызове `OnWindowReady(wavPath, windowStartAbsSec)`:
+
+1. Входящее окно заворачивается в `WindowTask`:
+   - `WavPath = wavPath`
+   - `StartAbsSec = windowStartAbsSec`
+   - `SequenceNumber = _nextSequenceNumber++`
+
+2. Окно добавляется в общую очередь `_incomingWindows`.  
+   Если её размер превысил `MaxQueueSize`, самое старое окно удаляется (и его временный WAV‑файл удаляется с диска).
+
+3. Если диспетчер ещё не запущен (`_isDispatching == false`), он запускается:
+   - `_isDispatching = true;`
+   - запуск `DispatchWindowsAsync()`.
+
+
+5. Диспетчер: DispatchWindowsAsync / DistributeWindowToRunner
+-------------------------------------------------------------
+
+`DispatchWindowsAsync` крутится в цикле:
+
+1. Берёт `WindowTask` из `_incomingWindows`. Если очередь пуста — выставляет `_isDispatching = false` и выходит.
+2. Вызывает `SelectBestRunnerForTask()`:
+   - сначала ищет **полностью свободного** runner’а:
+     - `_runnerIsProcessing[i] == false` и `_runnerQueues[i].Count == 0`;
+   - если такого нет, выбирает runner с **минимальным размером очереди** `_runnerQueues[i].Count`.
+3. Передаёт задачу в `EnqueueToRunnerQueue(runnerIndex, task)`.
+
+Таким образом:
+- свободные модели получают задачи в первую очередь;
+- при полной загрузке новые окна распределяются по принципу «у кого очередь короче».
+
+
+6. Очереди runner’ов и ProcessRunnerQueueAsync
+---------------------------------------------
+
+`EnqueueToRunnerQueue(runnerIndex, task)`:
+
+1. Под lock для данного runner’а:
+   - кладёт `task` в `_runnerQueues[runnerIndex]`;
+   - если `_runnerIsProcessing[runnerIndex] == false`, помечает его как `true` и запускает `ProcessRunnerQueueAsync(runnerIndex)`.
+
+`ProcessRunnerQueueAsync(int runnerIndex)`:
+
+1. В цикле:
+   - под lock достаёт следующий `WindowTask` из очереди `_runnerQueues[runnerIndex]`;
+   - если очередь пуста, выставляет `_runnerIsProcessing[runnerIndex] = false` и возвращается;
+   - вызывает `ProcessWindowAsync(task, runner)` для обработки окна.
+
+2. Внутри `ProcessWindowAsync(WindowTask windowTask, WhisperRunner whisperRunner)`:
+   - вызывает `whisperRunner.TranscribeAsync(windowTask.WavPath)` (и при включённой диаризации — ещё и `DiarizerRunner`);
+   - строит список `HistorySegment`:
+     - `startSecAbs = windowTask.StartAbsSec + textSeg.startSec`
+     - `endSecAbs   = windowTask.StartAbsSec + textSeg.endSec`
+   - передаёт сегменты в `AddToReorderBuffer(windowTask.SequenceNumber, historySegments)`.
+
+Важно: каждый `WhisperRunner` сам сериализует свои запросы через внутренний семафор `_requestSemaphore`,
+поэтому один процесс WhisperService обрабатывает только одно окно за раз.
+
+
+7. Буфер упорядочивания (ReorderBuffer)
+---------------------------------------
+
+Цель: результат обработки окон может приходить **в любом порядке** (например, окно 2 может быть быстрее окна 1),
+но в `HistoryController` текст должен добавляться в **правильном временном / логическом порядке**.
+
+Механизм:
+
+```csharp
+private void AddToReorderBuffer(long sequenceNumber, List<HistorySegment> segments)
+{
+    lock (_reorderBufferLock)
+    {
+        _reorderBuffer[sequenceNumber] = segments;
+        FlushReorderBuffer();
+    }
+}
+
+private void FlushReorderBuffer()
+{
+    while (_reorderBuffer.TryGetValue(_nextExpectedSequence, out var segments))
+    {
+        _reorderBuffer.Remove(_nextExpectedSequence);
+
+        if (segments.Any())
+        {
+            _historyController.AppendSegments(segments);
+        }
+
+        _nextExpectedSequence++;
+    }
+}
+```
+
+Логика:
+
+- Каждый `WindowTask` получает `SequenceNumber` строго по возрастанию.
+- Когда runner закончил обработку окна, он кладёт его сегменты в `_reorderBuffer[sequenceNumber]`.
+- `FlushReorderBuffer` пытается отдать в `HistoryController` все подряд идущие sequence:
+  - пока в словаре есть `_nextExpectedSequence`, его сегменты отправляются в `AppendSegments`;
+  - `_nextExpectedSequence` инкрементируется;
+  - как только встречается «дыра» (нет записи для очередного номера), алгоритм останавливается и ждёт прихода недостающего окна.
+
+Так мы избегаем ситуации, когда:
+- Окно 2 (3–6 сек) приходит раньше,
+- Окно 1 (0–3 сек) — позже,
+- а логика `HistoryController` по `endSecAbs`/`_lastCommittedAbsSec` отбрасывает «запаздывающие» сегменты как дубликаты.
+
+Сейчас порядок строго контролируется по `SequenceNumber`, а абсолютные таймстемпы (`startSecAbs`/`endSecAbs`)
+по‑прежнему используются для de‑duplication внутри `HistoryController`.
+
+
+8. Поведение при разных количествах моделей
+-------------------------------------------
+
+- При `WhisperModelCount = 1`:
+  - работает одна очередь runner’а + reordering buffer (по сути просто выравнивание по времени).
+  - задержка в основном = время записи окна + время обработки Whisper.
+
+- При `WhisperModelCount > 1`:
+  - несколько независимых процессов WhisperService обрабатывают разные окна параллельно;
+  - диспетчер равномерно распределяет нагрузку по свободным runner’ам;
+  - reordering buffer гарантирует, что текст всегда идёт в правильном порядке, даже если второе окно завершилось раньше первого.
+
+
+9. Та же архитектура для Vosk
+------------------------------
+
+Та же схема очередей и диспетчера используется для движка Vosk. В качестве движков STT
+в `AudioPipeline` передаются экземпляры `MultiLangVoskStt` (или `VoskRunner`); количество
+задаётся настройкой `VoskModelCount` в `Settings`. Общая очередь входящих окон, диспетчер
+(распределение по принципу «у кого очередь короче»), индивидуальные очереди движков и
+буфер упорядочивания по `SequenceNumber` — общие для Whisper и Vosk. Класс `AudioPipeline`
+работает с интерфейсом `ISttEngine` и не различает тип движка.
+
