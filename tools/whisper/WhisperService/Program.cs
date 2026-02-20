@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -66,8 +66,23 @@ class Program
                 return;
             }
             
-            Console.Error.WriteLine($"[WhisperService] Model file exists, size: {new FileInfo(_modelPath).Length} bytes");
+            var modelFileInfo = new FileInfo(_modelPath);
+            long modelSizeBytes = modelFileInfo.Length;
+            Console.Error.WriteLine($"[WhisperService] Model file exists, size: {modelSizeBytes} bytes");
             Console.Error.Flush();
+            
+            // Проверка минимального размера модели (модели Whisper обычно от 75 МБ для tiny до нескольких ГБ для large)
+            // Если файл меньше 1 МБ, это явно не валидная модель
+            const long MIN_MODEL_SIZE_BYTES = 1024 * 1024; // 1 МБ
+            if (modelSizeBytes < MIN_MODEL_SIZE_BYTES)
+            {
+                Console.Error.WriteLine($"ERROR: Model file is too small ({modelSizeBytes} bytes). Expected at least {MIN_MODEL_SIZE_BYTES} bytes.");
+                Console.Error.WriteLine($"ERROR: The model file may be corrupted, incomplete, or not downloaded properly.");
+                Console.Error.WriteLine($"ERROR: Please download a valid Whisper model from: https://github.com/ggerganov/whisper.cpp/tree/master/models");
+                Console.Error.Flush();
+                Environment.Exit(1);
+                return;
+            }
             
             // ВАЖНО: whisper_init_from_file помечена как deprecated и внутри вызывает whisper_context_default_params()
             // которая возвращает структуру по значению. Это может вызывать проблемы с маршалингом на x64.

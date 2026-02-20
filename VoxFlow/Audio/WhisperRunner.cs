@@ -185,6 +185,23 @@ namespace VoxFlow.Audio
                 {
                     throw new FileNotFoundException($"Whisper model not found: {modelPath}");
                 }
+                
+                // Проверка размера файла модели перед запуском сервиса
+                var modelFileInfo = new FileInfo(modelPath);
+                long modelSizeBytes = modelFileInfo.Length;
+                const long MIN_MODEL_SIZE_BYTES = 1024 * 1024; // 1 МБ - минимальный размер для любой валидной модели Whisper
+                
+                if (modelSizeBytes < MIN_MODEL_SIZE_BYTES)
+                {
+                    string errorMessage = $"Whisper model file is too small ({modelSizeBytes} bytes). " +
+                        $"Expected at least {MIN_MODEL_SIZE_BYTES} bytes. " +
+                        $"The model file at '{modelPath}' may be corrupted, incomplete, or not downloaded properly. " +
+                        $"Please download a valid Whisper model from: https://github.com/ggerganov/whisper.cpp/tree/master/models";
+                    System.Diagnostics.Debug.WriteLine($"[WhisperRunner] ERROR: {errorMessage}");
+                    throw new FileNotFoundException(errorMessage);
+                }
+                
+                System.Diagnostics.Debug.WriteLine($"[WhisperRunner] Model file size check passed: {modelSizeBytes} bytes ({modelSizeBytes / (1024.0 * 1024.0):F2} MB)");
 
                 // Устанавливаем рабочую директорию в tools\whisper\ где находятся whisper.dll и другие зависимости
                 string whisperDir = Path.GetDirectoryName(serviceExePath) ?? "";
